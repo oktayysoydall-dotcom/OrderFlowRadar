@@ -1,0 +1,45 @@
+workflows:
+  orderflowradar-debug:
+    name: OrderFlowRadar APK
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      java: 17
+    scripts:
+      - name: Android projesini ac
+        script: |
+          set -e
+          rm -rf /tmp/orderflowradar
+          mkdir -p /tmp/orderflowradar
+          unzip -q "$CM_BUILD_DIR/OrderFlowRadar-source.zip" -d /tmp/orderflowradar
+          SETTINGS_FILE="$(find /tmp/orderflowradar -maxdepth 4 -type f -name settings.gradle | head -n 1)"
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "settings.gradle bulunamadi"
+            exit 1
+          fi
+          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$CM_ENV"
+          echo "Android proje klasoru: $PROJECT_DIR"
+
+      - name: Android SDK 35 hazirla
+        script: |
+          set -e
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$PROJECT_DIR/local.properties"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -n "$SDKMANAGER" ]; then
+            yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null || true
+          fi
+
+      - name: Gradle 8.9 ile APK olustur
+        script: |
+          set -e
+          curl -fL --retry 3 https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle-8.9-bin.zip
+          rm -rf /tmp/gradle-8.9
+          unzip -q -o /tmp/gradle-8.9-bin.zip -d /tmp
+          cd "$PROJECT_DIR"
+          /tmp/gradle-8.9/bin/gradle --no-daemon :app:assembleDebug
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "$CM_BUILD_DIR/OrderFlowRadar-debug.apk"
+
+    artifacts:
+      - OrderFlowRadar-debug.apk
